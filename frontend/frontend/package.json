@@ -1,0 +1,19 @@
+{
+  "name": "smartplant-mobile-wrapper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor wrapper for SmartPlant frontend",
+  "scripts": {
+    "cap:sync": "npx cap sync",
+    "cap:add:android": "npx cap add android",
+    "cap:open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "typescript": "^6.0.2"
+  }
+}

@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>Smart Plant Irrigation</title>
+    <link rel="manifest" href="./manifest.json"/>
+    <link href="https://fonts.googleapis.com/css2?family=Bayon&family=Inter:wght@400;700;900&display=swap" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body,html{margin:0;padding:0;font-family:'Inter',sans-serif;background-color:#F3F3E9;color:#E33529;overflow-x:hidden;scroll-behavior:smooth;}
+        .font-bayon{font-family:'Bayon',sans-serif;}
+        .scroll-pane{position:sticky;top:0;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden;}
+        #pane-1{z-index:10;background-color:#F3F3E9;}
+        #pane-2{z-index:20;background-color:#F4CED3;border-top:8px solid #E33529;border-radius:40px 40px 0 0;box-shadow:0 -20px 40px rgba(227,53,41,0.15);}
+        #pane-3{z-index:30;background-color:#DBF4CD;border-top:8px solid #E33529;border-radius:40px 40px 0 0;box-shadow:0 -20px 40px rgba(227,53,41,0.15);}
+        input.db-input,select.db-input{background:#FFF;border:3px solid #E33529;border-radius:12px;padding:12px 16px;font-weight:900;color:#E33529;font-size:1rem;width:100%;outline:none;margin-bottom:12px;}
+        input.db-input::placeholder{color:#E33529;opacity:.5;}
+        .db-btn{display:inline-flex;justify-content:center;align-items:center;background-color:#E33529;color:#FFF;border-radius:999px;padding:12px 24px;font-weight:900;font-size:1.1rem;text-transform:uppercase;transition:all .2s ease;border:3px solid #E33529;cursor:pointer;user-select:none;}
+        .db-btn:hover{background-color:transparent;color:#E33529;}
+        .db-btn:disabled{opacity:.5;cursor:not-allowed;}
+        .db-box{border:4px solid #E33529;border-radius:32px;padding:2rem;box-shadow:8px 8px 0px #E33529;transition:transform .2s;}
+        .db-box:hover{transform:translateY(-4px);}
+        .hide-section{display:none!important;}
+        .alert-scroll::-webkit-scrollbar{width:8px;}
+        .alert-scroll::-webkit-scrollbar-thumb{background-color:#E33529;border-radius:10px;}
+        @keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(227,53,41,.4);}50%{box-shadow:0 0 0 20px rgba(227,53,41,0);}}
+        .voice-listening{animation:voicePulse 1.5s infinite;}
+        @keyframes slideDown{from{transform:translateY(-100%);opacity:0;}to{transform:translateY(0);opacity:1;}}
+        .hw-banner{animation:slideDown .4s ease;}
+        @keyframes popIn{from{transform:scale(.8);opacity:0;}to{transform:scale(1);opacity:1;}}
+        .pop-modal{animation:popIn .3s cubic-bezier(.34,1.56,.64,1);}
+        /* Feature chips */
+        .feat-chip{display:flex;flex-direction:column;align-items:center;text-align:center;border:3px solid #E33529;border-radius:24px;padding:1.5rem 1rem;background:white;transition:transform .2s,box-shadow .2s;cursor:pointer;text-decoration:none;color:#E33529;}
+        .feat-chip:hover{transform:translateY(-6px);box-shadow:6px 6px 0px #E33529;}
+        .feat-chip .icon{font-size:2rem;margin-bottom:.5rem;}
+        .feat-chip .label{font-weight:900;text-transform:uppercase;font-size:.7rem;letter-spacing:.05em;}
+        /* Page system */
+        .page{display:none;}
+        .page.active{display:block;}
+        /* Modal overlay */
+        #modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center;}
+        #modal-overlay.show{display:flex;}
+        /* Intro screen */
+        @keyframes introSlideUp {
+            0% { transform: translateY(0); opacity: 1; }
+            60% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-100%); opacity: 0; }
+        }
+        .intro-screen {
+            position: fixed;
+            inset: 0;
+            background-color: #F3F3E9;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            animation: introSlideUp 4s ease-in-out forwards;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- INTRO SPLASH -->
+<div class="intro-screen">
+    <h1 class="font-bayon text-[#E33529] text-7xl md:text-9xl tracking-wider text-center drop-shadow-[4px_4px_0px_#F4CED3]">SMART PLANT</h1>
+    <div class="mt-4 w-24 h-2 bg-[#E33529] animate-bounce"></div>
+</div>
+
+<!-- MODAL OVERLAY -->
+<div id="modal-overlay">
+    <div id="modal-box" class="pop-modal db-box bg-white max-w-sm w-full mx-4 flex flex-col gap-4 text-center">
+        <div id="modal-icon" class="text-6xl">⚠️</div>
+        <div id="modal-title" class="font-bayon text-4xl"></div>
+        <div id="modal-body" class="font-bold text-sm opacity-80"></div>
+        <button class="db-btn w-full" onclick="closeModal()">UNDERSTOOD</button>
+    </div>
+</div>
+
+<!-- PUSH MODAL OVERLAY -->
+<div id="push-modal-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden items-center justify-center">
+    <div class="pop-modal db-box bg-[#F3F3E9] max-w-sm w-full mx-4 flex flex-col gap-4 text-center">
+        <h2 class="font-bayon text-4xl border-b-4 border-[#E33529] pb-2">PUSH NOTIFICATIONS</h2>
+        <p class="font-bold text-sm mb-2 opacity-80">ENABLED: Alerts are sent directly to your screen even when the app is closed.<br/><br/>DISABLED: Alerts only appear inside the system logs.</p>
+        <button id="btnPushEnable" class="db-btn w-full !bg-[#DBF4CD] !text-[#E33529]" onclick="setPushState(true)">ENABLE DIRECT ALERTS</button>
+        <button id="btnPushDisable" class="db-btn w-full !bg-white !text-[#E33529]" onclick="setPushState(false)">DISABLE</button>
+        <button class="db-btn w-full !mt-2 !bg-[#F4CED3] !text-[#E33529]" onclick="closePushModal()">CANCEL</button>
+    </div>
+</div>
+
+<!-- PAGE: AUTH -->
+<div id="page-auth" class="page active">
+    <section class="flex justify-center items-center min-h-screen px-4 bg-[#F3F3E9]">
+        <div class="db-box bg-white max-w-md w-full flex flex-col gap-4">
+            <h1 class="font-bayon text-[#E33529] text-5xl text-center border-b-4 border-[#E33529] pb-4 mb-4">SMART PLANT<br/>IRRIGATION</h1>
+            <h3 class="font-bold uppercase text-sm">Login</h3>
+            <input id="l_email" class="db-input" placeholder="EMAIL ADDRESS"/>
+            <input id="l_pass" type="password" class="db-input" placeholder="PASSWORD"/>
+            <button class="db-btn w-full mb-4" onclick="loginUser()">LOGIN</button>
+            <h3 class="font-bold uppercase text-sm border-t-2 border-[#E33529] pt-4">New User? Register</h3>
+            <input id="r_email" class="db-input" placeholder="EMAIL ADDRESS"/>
+            <input id="r_pass" type="password" class="db-input" placeholder="PASSWORD"/>
+            <button class="db-btn w-full !bg-white !text-[#E33529]" onclick="registerUser()">CREATE ACCOUNT</button>
+            <div id="msgBox" class="hidden bg-[#F4CED3] p-3 rounded-xl border-2 border-[#E33529] text-center">
+                <div id="msgTitle" class="font-bayon text-xl"></div>
+                <div id="msgText" class="text-xs font-bold"></div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- PAGE: DASHBOARD (3-pane) -->
+<div id="page-dash" class="page">
+    <!-- HARDWARE OFFLINE BANNER -->
+    <div id="hwBanner" class="hide-section hw-banner fixed top-[68px] left-0 w-full z-[90] bg-black text-[#FDE047] font-bayon text-xl text-center py-3 px-4 border-b-4 border-[#FDE047]">
+        ⚠️ HARDWARE OFFLINE — ESP32 NOT DETECTED. PLEASE CONNECT YOUR DEVICE.
+    </div>
+    <!-- GLOBAL NAV -->
+    <nav class="fixed top-0 left-0 w-full z-[100] bg-[#F3F3E9] border-b-4 border-[#E33529] px-4 py-3 flex justify-between items-center">
+        <button onclick="gotoPage('dash')" class="font-bayon text-3xl text-[#E33529] cursor-pointer border-none bg-transparent p-0">SMART PLANT</button>
+        <div class="flex gap-3 items-center">
+            <button id="btnInstall" class="db-btn !py-2 !px-4 !text-sm hidden" onclick="installApp()">INSTALL</button>
+            <button id="btnBell" class="db-btn !px-3 !py-2 hidden !bg-[#FDE047] !text-[#E33529]" onclick="gotoPage_notifs()" title="Notifications">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>
+            </button>
+            <button class="db-btn !py-2 !px-4 !text-sm !bg-[#F4CED3] !text-[#E33529]" onclick="gotoPage_profile()">PROFILE</button>
+            <button id="btnLogout" class="db-btn !py-2 !text-sm hidden" onclick="logout()">LOGOUT</button>
+        </div>
+    </nav>
+
+    <div style="margin-top:68px;">
+
+    <!-- PANE 1: LIVE DATA + FEATURES -->
+    <section id="pane-1" class="scroll-pane pt-6 px-4">
+        <div class="max-w-7xl mx-auto w-full flex flex-col justify-center flex-1 gap-6">
+            <!-- LIVE DATA BOX -->
+            <div class="db-box bg-white relative overflow-hidden">
+                <svg class="absolute top-0 right-0 w-48 opacity-5 pointer-events-none" viewBox="0 0 100 100"><polygon points="50,10 80,70 20,70" fill="#E33529"/><rect x="45" y="70" width="10" height="30" fill="#E33529"/></svg>
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 border-b-4 border-[#E33529] pb-4">
+                    <div class="font-bayon text-7xl md:text-8xl leading-none">LIVE DATA</div>
+                    <div class="font-bold bg-[#E33529] text-white p-3 rounded-xl mt-4 md:mt-0">
+                        <div>ZONE: <span id="p_zone" class="text-[#FDE047]">A</span></div>
+                        <div class="text-sm border-t border-white/20 mt-1 pt-1">STATUS: <span id="plantLabel" class="text-[#F4CED3]">AWAITING</span></div>
+                        <div class="text-xs opacity-80" id="apiText">API: OFFLINE</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-[#FDE047] rounded-[20px] p-5 border-4 border-[#E33529] shadow-[4px_4px_0px_#E33529] text-center">
+                        <div class="font-bold text-xs uppercase tracking-widest mb-1">Moisture</div>
+                        <div id="kvMoisture" class="font-bayon text-6xl md:text-7xl">--%</div>
+                    </div>
+                    <div class="bg-[#FDE047] rounded-[20px] p-5 border-4 border-[#E33529] shadow-[4px_4px_0px_#E33529] text-center">
+                        <div class="font-bold text-xs uppercase tracking-widest mb-1">Temperature</div>
+                        <div id="kvTemp" class="font-bayon text-6xl md:text-7xl">--°C</div>
+                    </div>
+                    <div class="bg-[#FDE047] rounded-[20px] p-5 border-4 border-[#E33529] shadow-[4px_4px_0px_#E33529] text-center">
+                        <div class="font-bold text-xs uppercase tracking-widest mb-1">Humidity</div>
+                        <div id="kvHumidity" class="font-bayon text-6xl md:text-7xl">--%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEATURE CHIPS -->
+            <div>
+                <h2 class="font-bayon text-2xl mb-3 border-b-4 border-[#E33529] pb-2">INTEGRATED FEATURES — TAP TO EXPLORE</h2>
+                <div class="grid grid-cols-4 md:grid-cols-8 gap-3">
+                    <a onclick="gotoFeature('pwa')" class="feat-chip"><div class="icon">📱</div><div class="label">Mobile PWA</div></a>
+                    <a onclick="gotoFeature('sensors')" class="feat-chip !bg-[#DBF4CD]"><div class="icon">🌡️</div><div class="label">Sensors</div></a>
+                    <a onclick="gotoFeature('ai')" class="feat-chip"><div class="icon">🤖</div><div class="label">AI Model</div></a>
+                    <a onclick="gotoFeature('cloud')" class="feat-chip !bg-[#F4CED3]"><div class="icon">☁️</div><div class="label">Cloud API</div></a>
+                    <a onclick="gotoFeature('multizone')" class="feat-chip"><div class="icon">🌿</div><div class="label">Multi-Zone</div></a>
+                    <a onclick="gotoFeature('solar')" class="feat-chip !bg-[#FDE047]"><div class="icon">☀️</div><div class="label">Solar Ready</div></a>
+                    <a onclick="gotoFeature('alerts')" class="feat-chip"><div class="icon">🔔</div><div class="label">Push Alerts</div></a>
+                    <a onclick="gotoFeature('voice')" class="feat-chip !bg-[#F4CED3]"><div class="icon">🎙️</div><div class="label">Voice AI</div></a>
+                </div>
+            </div>
+            <div class="text-center font-bold text-sm tracking-widest opacity-50 uppercase animate-bounce pb-4">Scroll for operations ↓</div>
+        </div>
+    </section>
+
+    <!-- PANE 2: IRRIGATION + ML + VOICE -->
+    <section id="pane-2" class="scroll-pane justify-center p-4 md:p-8">
+        <div class="max-w-7xl mx-auto w-full flex flex-col gap-8 my-auto">
+            <div class="absolute top-4 left-0 font-bayon text-[12vw] opacity-[0.06] pointer-events-none whitespace-nowrap select-none px-8">FOREST OPS</div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 relative z-10">
+                <!-- IRRIGATION -->
+                <div class="db-box bg-white flex flex-col justify-center text-center items-center">
+                    <div class="bg-[#DBF4CD] p-5 rounded-full border-4 border-[#E33529] mb-4 shadow-[4px_4px_0px_#E33529]">
+                        <svg class="w-14 h-14" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2S5 9.08 5 14c0 3.86 3.14 7 7 7s7-3.14 7-7c0-4.92-7-12-7-12zm0 17c-2.76 0-5-2.24-5-5 0-3.44 5-9.59 5-9.59S17 12.56 17 16c0 2.76-2.24 5-5 5z"/></svg>
+                    </div>
+                    <h2 class="font-bayon text-5xl mb-2">IRRIGATION</h2>
+                    <div id="hwWarning" class="hide-section mb-3 bg-black text-[#FDE047] font-bold text-sm px-4 py-2 rounded-xl">⚠️ Hardware offline. Cannot activate pump.</div>
+                    <p class="font-bold mb-6 max-w-sm text-sm">Manually override the pump and water your specimen.</p>
+                    <button id="btnMotor" class="db-btn w-full !bg-[#FDE047] !text-[#E33529] hover:!bg-[#E33529] hover:!text-white !text-xl !py-5 shadow-[6px_6px_0px_#8b0000]" onclick="handleMotorClick()">START WATER PUMP</button>
+                    <div id="motorStatus" class="hidden mt-4 font-bayon text-2xl text-[#E33529] border-t-4 border-[#E33529] pt-3 w-full text-center">PUMP IDLE</div>
+                </div>
+                <!-- ML PREDICTION -->
+                <div class="db-box bg-[#FDE047] flex flex-col justify-center">
+                    <h2 class="font-bayon text-5xl mb-2">ML PREDICTION</h2>
+                    <p class="font-bold mb-4 text-sm">Simulate data to test the Random Forest model.</p>
+                    <div class="grid grid-cols-3 gap-3 mb-4">
+                        <input id="m_moisture" type="number" class="db-input !mb-0 !py-3" placeholder="H2O %"/>
+                        <input id="m_temp" type="number" class="db-input !mb-0 !py-3" placeholder="TEMP °C"/>
+                        <input id="m_humidity" type="number" class="db-input !mb-0 !py-3" placeholder="HUMIDITY %"/>
+                    </div>
+                    <button class="db-btn w-full !bg-white !text-[#E33529]" onclick="predictManual()">CALCULATE HEALTH</button>
+                    <div id="manualPredBox" class="font-bayon text-3xl mt-4 pb-2 border-b-4 border-[#E33529] hidden text-center">
+                        VERDICT: <span id="manualPredChip" class="bg-white px-4 py-1 rounded-xl shadow-[4px_4px_0px_#E33529]">--</span>
+                    </div>
+                </div>
+            </div>
+            <!-- VOICE -->
+            <div class="db-box bg-white flex flex-col md:flex-row items-center gap-6 relative z-10">
+                <div class="md:w-1/3">
+                    <h2 class="font-bayon text-4xl mb-2">VOICE CONTROL</h2>
+                    <p class="font-bold text-sm opacity-80">Try: "water plant" · "check moisture" · "show alerts" · "status"</p>
+                </div>
+                <div class="flex-1 flex flex-col items-center gap-3">
+                    <button id="btnVoice" onclick="toggleVoice()" class="w-20 h-20 rounded-full bg-[#E33529] text-white flex items-center justify-center border-4 border-[#E33529] shadow-[6px_6px_0px_#8b0000] transition-all hover:bg-[#FDE047] hover:text-[#E33529]">
+                        <svg class="w-9 h-9" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+                    </button>
+                    <div id="voiceStatus" class="font-bold text-sm uppercase tracking-widest">TAP TO SPEAK</div>
+                    <div id="voiceTranscript" class="font-bayon text-2xl text-[#E33529]/60 min-h-8 text-center"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PANE 3: REGISTRY + ALERTS -->
+    <section id="pane-3" class="scroll-pane pt-8 md:pt-14 p-4">
+        <div class="max-w-7xl mx-auto w-full flex flex-col gap-6 flex-1 relative z-10">
+            <!-- REGISTRY -->
+            <div class="db-box bg-white flex flex-col md:flex-row items-center gap-6">
+                <div class="md:w-1/4"><h2 class="font-bayon text-4xl leading-none">REGISTRY</h2><p class="font-bold text-sm mt-1 opacity-80">Pair new hardware node.</p></div>
+                <div class="flex-1 w-full flex flex-col md:flex-row gap-4">
+                    <input id="plant_id" class="db-input !mb-0" placeholder="MODULE ID (ex: ESP-01)"/>
+                    <select id="zone" class="db-input !mb-0 md:w-40 !bg-[#F4CED3]">
+                        <option value="A">ZONE A</option><option value="B">ZONE B</option><option value="C">ZONE C</option>
+                    </select>
+                    <button class="db-btn whitespace-nowrap !bg-[#FDE047] !text-[#E33529]" onclick="addPlant()">PAIR</button>
+                </div>
+                <div id="plantMsg" class="hidden font-bold bg-[#E33529] text-white px-4 py-2 rounded-xl"></div>
+            </div>
+            <!-- ALERTS -->
+            <div class="db-box bg-[#F3F3E9] flex-1 flex flex-col">
+                <div class="flex flex-col items-start border-b-4 border-[#E33529] pb-4 mb-4 gap-3">
+                    <h2 class="font-bayon text-4xl m-0">SYSTEM LOGS</h2>
+                    <button class="db-btn !text-sm !py-2 !px-4 !bg-[#F4CED3] !text-[#E33529]" onclick="gotoPage_notifs()">VIEW ALL LOGS & ALERTS >></button>
+                </div>
+                <ul id="notifs-home" class="flex-1 overflow-y-auto pr-3 alert-scroll font-bold space-y-3 h-64"></ul>
+            </div>
+        </div>
+        <footer class="mt-8 bg-[#E33529] text-white p-8 w-[calc(100%+2rem)] -ml-4 -mb-4 text-center rounded-t-[40px]">
+            <div class="font-bayon text-4xl mb-1 text-[#FDE047]">THE SMART PLANT INITIATIVE</div>
+            <div class="font-bold text-sm opacity-70">© 2026 · PWA · ESP32 · AI · CLOUD · VOICE</div>
+        </footer>
+    </section>
+    </div>
+</div>
+
+<!-- PAGE: FEATURE DETAIL -->
+<div id="page-feature" class="page min-h-screen bg-[#F3F3E9]">
+    <div class="max-w-4xl mx-auto p-6">
+        <button onclick="gotoPage('dash')" class="db-btn !bg-white !text-[#E33529] mb-8">← BACK TO DASHBOARD</button>
+        <div id="feature-content"></div>
+    </div>
+</div>
+
+<!-- PAGE: NOTIFS -->
+<div id="page-notifs" class="page min-h-screen bg-[#F3F3E9]">
+    <div class="max-w-4xl mx-auto p-6 md:p-12">
+        <button onclick="gotoPage('dash')" class="db-btn !bg-white !text-[#E33529] mb-6">← BACK TO DASHBOARD</button>
+        <div class="db-box bg-white flex-1 flex flex-col min-h-[60vh] md:min-h-[70vh]">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b-4 border-[#E33529] pb-4 mb-6 gap-3">
+                <h2 class="font-bayon text-6xl m-0">SYSTEM LOGS</h2>
+                <div class="flex gap-2 flex-wrap">
+                    <button id="btnNotifSettings" class="db-btn !text-sm !py-2 !px-4 !bg-[#FDE047] !text-[#E33529]" onclick="openPushModal()">🔔 PUSH SETTINGS</button>
+                    <button class="db-btn !text-sm !py-2 !px-4" onclick="loadNotifs()">REFRESH</button>
+                    <button class="db-btn !text-sm !py-2 !px-4 !bg-white !text-[#E33529]" onclick="markAllNotifsRead()">CLEAR</button>
+                </div>
+            </div>
+            <ul id="notifs-page" class="flex-1 overflow-y-auto pr-3 alert-scroll font-bold space-y-4 max-h-[60vh]"></ul>
+        </div>
+    </div>
+</div>
+
+<!-- PAGE: PROFILE -->
+<div id="page-profile" class="page min-h-screen bg-[#F3F3E9]">
+    <div class="max-w-4xl mx-auto p-6">
+        <button onclick="gotoPage('dash')" class="db-btn !bg-white !text-[#E33529] mb-6">← BACK</button>
+        <div class="db-box bg-white mb-6">
+            <h1 class="font-bayon text-6xl border-b-4 border-[#E33529] pb-4 mb-6">MY PROFILE</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-[#FDE047] rounded-2xl p-4 border-4 border-[#E33529]">
+                    <div class="font-bold text-xs uppercase tracking-widest mb-1">Name</div>
+                    <div id="prof_name" class="font-bayon text-2xl md:text-3xl break-all">--</div>
+                </div>
+                <div class="bg-[#FDE047] rounded-2xl p-4 border-4 border-[#E33529]">
+                    <div class="font-bold text-xs uppercase tracking-widest mb-1">Email</div>
+                    <div id="prof_email" class="font-bayon text-xl md:text-2xl break-all">--</div>
+                </div>
+            </div>
+        </div>
+        <div class="db-box bg-[#F4CED3]">
+            <h2 class="font-bayon text-5xl border-b-4 border-[#E33529] pb-4 mb-6">PAIRED PLANTS</h2>
+            <ul id="prof_plants" class="space-y-4 font-bold"></ul>
+        </div>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// CONFIG & STATE
+// ══════════════════════════════════════════
+function resolveApiBase(){return(location.hostname==="localhost"||location.hostname==="127.0.0.1")?"http://127.0.0.1:5000":"https://smartplant-4j1b.onrender.com";}
+const API=resolveApiBase();
+let liveTimer=null,notifTimer=null,activeZone="A",pushSubscription=null;
+let hwOnline=false,motorOn=false,lastMoisture=null;
+const seenNotifIds=new Set();let notifBootstrapped=false;
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',(e)=>{e.preventDefault();deferredPrompt=e;document.getElementById('btnInstall')?.classList.remove('hidden');});
+window.addEventListener('appinstalled',()=>{document.getElementById('btnInstall')?.classList.add('hidden');});
+async function installApp(){
+    if(!deferredPrompt)return;
+    deferredPrompt.prompt();
+    const{outcome}=await deferredPrompt.userChoice;
+    if(outcome==='accepted')document.getElementById('btnInstall').classList.add('hidden');
+    deferredPrompt=null;
+}
+
+// ── helpers ──
+function saveUser(u){localStorage.setItem("user",JSON.stringify(u));}
+function getUser(){const u=localStorage.getItem("user");return u?JSON.parse(u):null;}
+function getToken(){return getUser()?.token||"";}
+function authHeaders(){const t=getToken();return t?{Authorization:`Bearer ${t}`}:{};}
+function logout(){clearInterval(liveTimer);clearInterval(notifTimer);localStorage.removeItem("user");gotoPage('auth');}
+async function postJSON(url,body){
+    const res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json",...authHeaders()},body:JSON.stringify(body)});
+    let data;try{data=await res.json();}catch{data={raw:await res.text()};}
+    return{res,data};
+}
+function showMsg(title,text){
+    const mb=document.getElementById("msgBox");mb.classList.remove("hidden");
+    document.getElementById("msgTitle").textContent=title;document.getElementById("msgText").textContent=text;
+}
+
+// ── modal ──
+function showModal(icon,title,body){
+    document.getElementById("modal-icon").textContent=icon;
+    document.getElementById("modal-title").textContent=title;
+    document.getElementById("modal-body").textContent=body;
+    document.getElementById("modal-overlay").classList.add("show");
+}
+function closeModal(){document.getElementById("modal-overlay").classList.remove("show");}
+
+// ── page router ──
+function gotoPage(name){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-'+name).classList.add('active');
+    window.scrollTo(0,0);
+}
+
+// ── feature pages ──
+const FEATURES={
+    pwa:{icon:"📱",title:"Mobile PWA",color:"#F4CED3",
+        body:`<h3>What is a PWA?</h3><p>A Progressive Web App (PWA) is a website that can be installed on your phone and works like a native Android or iOS app — no App Store required.</p>
+        <h3>How SmartPlant uses it</h3><ul><li><b>Installable:</b> "Add to Home Screen" on any device</li><li><b>Offline Support:</b> Service Worker caches the app shell so UI loads without internet</li><li><b>Push Notifications:</b> The server can push alerts directly to your device even when the browser is closed</li></ul>
+        <h3>Technologies</h3><p>Service Worker API · Web Push API · manifest.json · Cache Storage</p>`},
+    sensors:{icon:"🌡️",title:"Advanced Sensor Suite",color:"#DBF4CD",
+        body:`<h3>Sensors Deployed on ESP32</h3>
+        <table><tr><th>Sensor</th><th>Measures</th><th>Range</th></tr>
+        <tr><td>Capacitive Soil Moisture Sensor</td><td>Soil water content (%)</td><td>0–100%</td></tr>
+        <tr><td>DHT11</td><td>Air temperature</td><td>0–50 °C ±2°C</td></tr>
+        <tr><td>DHT11</td><td>Relative humidity</td><td>20–90% RH ±5%</td></tr></table>
+        <h3>Data Flow</h3><p>ESP32 reads sensors every 10 seconds → sends JSON payload to <b>/api/esp/sensor</b> endpoint via HTTP POST → stored in SQLite → dashboard polls every 3 seconds.</p>
+        <h3>Why Capacitive over Resistive?</h3><p>Capacitive sensors don't corrode in wet soil and give stable long-term readings. Resistive sensors oxidise and drift over time.</p>`},
+    ai:{icon:"🤖",title:"AI-Based Irrigation",color:"#FDE047",
+        body:`<h3>Machine Learning Model</h3><p>A <b>Random Forest Classifier</b> trained on a synthetic dataset of 1,000 samples predicts whether irrigation is needed.</p>
+        <h3>Input Features</h3><ul><li>Soil Moisture (%)</li><li>Temperature (°C)</li><li>Relative Humidity (%)</li></ul>
+        <h3>Output</h3><p>Binary classification: <b>IRRIGATION NEEDED</b> or <b>NO IRRIGATION NEEDED</b></p>
+        <h3>Model Details</h3><ul><li>Algorithm: sklearn RandomForestClassifier</li><li>Trees: 100 estimators</li><li>Training accuracy: ~95%</li><li>Served via: Flask REST API</li></ul>
+        <h3>Live vs Manual</h3><p>The live prediction runs automatically on the latest ESP32 reading. The manual prediction lets you type in hypothetical values.</p>`},
+    cloud:{icon:"☁️",title:"Cloud Integration",color:"#F4CED3",
+        body:`<h3>Architecture</h3><p>The backend is a <b>Flask REST API</b> deployed to the cloud (Render.com). It provides a persistent REST API accessible from anywhere in the world.</p>
+        <h3>Endpoints</h3><ul><li><b>POST /api/esp/sensor</b> — ESP32 pushes readings</li><li><b>GET /api/predict/live/:zone</b> — Latest data + ML prediction</li><li><b>POST /api/predict/manual</b> — Manual ML query</li><li><b>POST /api/motor/toggle</b> — Toggle water pump</li><li><b>POST /api/push/subscribe</b> — Register push endpoint</li></ul>
+        <h3>Database</h3><p>SQLite database stores all sensor logs, notifications, plant registrations, and user accounts.</p>
+        <h3>Authentication</h3><p>JWT Bearer Tokens issued on login, verified on every protected endpoint.</p>`},
+    multizone:{icon:"🌿",title:"Multiple Plant Management",color:"#DBF4CD",
+        body:`<h3>Zone System</h3><p>The SmartPlant system supports multiple independent zones (A, B, C), each with its own ESP32 node, sensor readings, and motor control.</p>
+        <h3>How to use</h3><ol><li>Register each ESP32 with a unique hardware ID</li><li>Assign it to a zone (A/B/C) in the Registry section</li><li>Switch zones in the dashboard to monitor different plants</li></ol>
+        <h3>Scalability</h3><p>The zone system is designed to scale. Additional zones can be added by simply extending the zone list in both the firmware and the API.</p>`},
+    solar:{icon:"☀️",title:"Solar Power Ready",color:"#FDE047",
+        body:`<h3>Energy Independence</h3><p>The ESP32 microcontroller consumes very little power (~80mA active, ~10μA deep sleep), making it an ideal candidate for solar-powered deployment.</p>
+        <h3>Recommended Setup</h3><ul><li><b>Solar Panel:</b> 5V/1W mono-crystalline panel</li><li><b>Charge Controller:</b> TP4056 with LiPo battery</li><li><b>Battery:</b> 3.7V 2000mAh LiPo cell</li><li><b>Runtime:</b> 3–5 days without sun (with deep sleep enabled)</li></ul>
+        <h3>Deep Sleep Mode</h3><p>Future firmware update will enable ESP32 deep sleep between readings, reducing power consumption by ~90%.</p>`},
+    alerts:{icon:"🔔",title:"Alert & Notification System",color:"#F4CED3",
+        body:`<h3>Multi-Channel Alerts</h3><p>SmartPlant sends real-time push notifications to your browser/phone even when the app is closed.</p>
+        <h3>Technology: Web Push API</h3><ul><li><b>VAPID Keys:</b> Cryptographically signed push messages</li><li><b>Service Worker:</b> Background listener intercepts push events</li><li><b>No SMS cost:</b> Works entirely through the browser</li></ul>
+        <h3>Trigger Conditions</h3><ul><li>Soil moisture drops below 30% → "Critical — Water Needed" alert</li><li>Moisture recovers above 60% → "Plant is Healthy" alert</li><li>Motor activated/deactivated → status notification</li></ul>`},
+    voice:{icon:"🎙️",title:"Voice Assistant",color:"#DBF4CD",
+        body:`<h3>Browser-Native Voice AI</h3><p>SmartPlant uses the <b>Web Speech API</b> built into modern browsers — no cloud AI subscription or external SDK needed.</p>
+        <h3>Supported Commands</h3><ul><li>"water plant" → toggles the pump</li><li>"check moisture" → reads soil moisture aloud</li><li>"check temperature" → reads temperature aloud</li><li>"check humidity" → reads humidity aloud</li><li>"show alerts" → loads the alert log</li><li>"status" → reads plant health status</li></ul>
+        <h3>Text-to-Speech</h3><p>The system responds audibly using the SpeechSynthesis API. All processing happens on your device — no data is sent to a server.</p>
+        <h3>Browser Support</h3><p>Chrome, Edge, Safari (iOS 14.5+). Firefox has limited support.</p>`}
+};
+
+function gotoFeature(id){
+    const f=FEATURES[id];if(!f)return;
+    const fc=document.getElementById('feature-content');
+    fc.innerHTML=`
+        <div class="db-box mb-6" style="background:${f.color}">
+            <div class="text-7xl mb-4">${f.icon}</div>
+            <h1 class="font-bayon text-7xl leading-none mb-2">${f.title.toUpperCase()}</h1>
+        </div>
+        <div class="db-box bg-white prose prose-lg max-w-none feature-body">${f.body}</div>`;
+    // add table styles inline
+    fc.querySelectorAll('table').forEach(t=>{t.className='w-full border-collapse mb-4';});
+    fc.querySelectorAll('th').forEach(t=>{t.className='bg-[#E33529] text-white p-2 font-bold text-sm text-left';});
+    fc.querySelectorAll('td').forEach(t=>{t.className='border-2 border-[#E33529] p-2 font-bold text-sm';});
+    fc.querySelectorAll('h3').forEach(t=>{t.className='font-bayon text-3xl mt-6 mb-2 border-b-2 border-[#E33529] pb-1';});
+    fc.querySelectorAll('ul,ol').forEach(t=>{t.className='space-y-2 my-4 ml-4 font-bold text-sm list-disc';});
+    fc.querySelectorAll('p').forEach(t=>{t.className='font-bold text-sm leading-relaxed my-3';});
+    gotoPage('feature');
+}
+
+// ══════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════
+window.addEventListener('load',()=>{
+    const u=getUser();
+    if(u&&u.token){gotoPage('dash');document.getElementById('btnLogout').classList.remove('hidden');document.getElementById('btnBell').classList.remove('hidden');initAfterLogin();}
+    else gotoPage('auth');
+});
+
+async function registerUser(){
+    const email=document.getElementById('r_email').value.trim();
+    const pass=document.getElementById('r_pass').value;
+    if(!email||!pass){showMsg('FAIL','EMAIL AND PASSWORD REQUIRED');return;}
+    try{const{res,data}=await postJSON(`${API}/api/auth/register`,{name:email.split('@')[0],email,password:pass});
+    if(res.ok)showMsg('REGISTERED','PLEASE LOGIN ABOVE');else showMsg('ERROR',JSON.stringify(data));}
+    catch(e){showMsg('ERROR',String(e));}
+}
+async function loginUser(){
+    const email=document.getElementById('l_email').value.trim();
+    const pass=document.getElementById('l_pass').value;
+    if(!email||!pass){showMsg('FAIL','ENTER CREDENTIALS');return;}
+    try{const{res,data}=await postJSON(`${API}/api/auth/login`,{email,password:pass});
+    if(!res.ok){showMsg('LOGIN FAILED',JSON.stringify(data));return;}
+    saveUser({user_id:data.user_id,name:data.name,email:data.email,token:data.token});
+    gotoPage('dash');document.getElementById('btnLogout').classList.remove('hidden');document.getElementById('btnBell').classList.remove('hidden');
+    window.scrollTo(0,0);await initAfterLogin();}
+    catch(e){showMsg('ERROR',String(e));}
+}
+
+// ══════════════════════════════════════════
+// AFTER LOGIN
+// ══════════════════════════════════════════
+async function initAfterLogin(){
+    try{const res=await fetch(`${API}/api/plants/mine`,{headers:authHeaders()});
+    if(res.ok){const ps=await res.json();if(ps.length>0&&ps[0]?.zone_id){activeZone=ps[0].zone_id;document.getElementById('p_zone').textContent=activeZone;}}}catch(e){}
+    startLivePolling();startNotificationPolling();checkAPI();
+    if('Notification'in window&&Notification.permission==='granted')await subscribeToPush();
+}
+
+// ══════════════════════════════════════════
+// LIVE DATA + HARDWARE STATUS
+// ══════════════════════════════════════════
+async function loadLiveData(){
+    try{
+        const res=await fetch(`${API}/api/predict/live/${activeZone}`,{headers:authHeaders()});
+        if(!res.ok){if(res.status===401){logout();return;} setHwOffline();return;}
+        const data=await res.json();
+        const s=data.latest_sensor||{};
+
+        // Hardware online/offline detection: if no sensor or timestamp is old
+        if(!s||!s.soil_moisture){setHwOffline();return;}
+        // Check freshness (5 min threshold)
+        if(s.ts){
+            const ts=new Date((s.ts.endsWith('Z') || s.ts.includes('+')) ? s.ts : s.ts + 'Z');
+            const now=new Date();
+            const diffMin=(now-ts)/60000;
+            if(diffMin>5){setHwOffline();return;}
+        }
+        setHwOnline();
+
+        const moisture=parseFloat(s.soil_moisture??100);
+        lastMoisture=moisture;
+        document.getElementById('kvMoisture').textContent=moisture+'%';
+        document.getElementById('kvTemp').textContent=(s.temperature_c??'--')+'°C';
+        document.getElementById('kvHumidity').textContent=(s.humidity??'--')+'%';
+
+        const wasMotorOn=motorOn;
+        motorOn=!!data.motor_on;
+        const btn=document.getElementById('btnMotor');
+        if(motorOn){
+            btn.textContent='STOP WATERING';
+            btn.classList.add('!bg-white','!text-[#E33529]');
+            document.getElementById('motorStatus').classList.remove('hidden');
+            document.getElementById('motorStatus').textContent='🚿 PUMP ACTIVE';
+        } else {
+            btn.textContent='START WATER PUMP';
+            btn.classList.remove('!bg-white','!text-[#E33529]');
+            document.getElementById('motorStatus').classList.add('hidden');
+        }
+
+        // Auto-stop: if was watering and moisture recovered
+        if(wasMotorOn&&!motorOn&&moisture>=60){
+            showModal('🌿','PLANT HEALTHY!','Optimal moisture reached. Pump has been automatically stopped.');
+            triggerPushAlert('Plant Healthy!','Moisture back to optimal. Irrigation stopped.');
+        }
+
+        const label=document.getElementById('plantLabel');
+        if(motorOn)label.textContent='IRRIGATING...';
+        else if(moisture<30)label.textContent='CRITICAL DESICCATION';
+        else if(moisture<60)label.textContent='SUB-OPTIMAL';
+        else label.textContent='HOMEOSTASIS';
+
+    }catch(e){setHwOffline();}
+}
+
+function setHwOnline(){
+    hwOnline=true;
+    document.getElementById('hwBanner').classList.add('hide-section');
+    document.getElementById('hwWarning').classList.add('hide-section');
+    document.getElementById('btnMotor').disabled=false;
+}
+function setHwOffline(){
+    hwOnline=false;
+    document.getElementById('hwBanner').classList.remove('hide-section');
+    document.getElementById('hwWarning').classList.remove('hide-section');
+    document.getElementById('btnMotor').disabled=true;
+    document.getElementById('kvMoisture').textContent='--%';
+    document.getElementById('kvTemp').textContent='--°C';
+    document.getElementById('kvHumidity').textContent='--%';
+    document.getElementById('plantLabel').textContent='NO SIGNAL';
+}
+
+function startLivePolling(){clearInterval(liveTimer);liveTimer=setInterval(loadLiveData,3000);loadLiveData();}
+
+async function checkAPI(){
+    try{const r=await fetch(`${API}/api/health`);document.getElementById('apiText').textContent=r.ok?'API: CONNECTED':'API: OFFLINE';}
+    catch{document.getElementById('apiText').textContent='API: OFFLINE';}
+}
+
+// ══════════════════════════════════════════
+// SMART MOTOR CONTROL
+// ══════════════════════════════════════════
+async function handleMotorClick(){
+    if(!hwOnline){showModal('🔌','HARDWARE OFFLINE','No ESP32 signal detected. Please power on and connect your device before activating the pump.');return;}
+    if(!motorOn&&lastMoisture!==null&&lastMoisture>=60){showModal('💧','PLANT ALREADY HAPPY!','Moisture is at '+lastMoisture+'% — your plant has enough water. No irrigation needed right now 🌿');return;}
+    if(!motorOn){showModal('🚿','PUMP ACTIVATED!','Water pump is now running. Monitoring moisture levels automatically...');}
+    try{await postJSON(`${API}/api/motor/toggle`,{zone_id:activeZone});await loadLiveData();}catch(e){}
+}
+
+// ══════════════════════════════════════════
+// PROFILE PAGE
+// ══════════════════════════════════════════
+async function gotoPage_profile(){
+    const user=getUser();if(!user)return;
+    document.getElementById('prof_name').textContent=user.name||'--';
+    document.getElementById('prof_email').textContent=user.email||'--';
+    const ul=document.getElementById('prof_plants');ul.innerHTML='<li class="font-bold opacity-50">Loading...</li>';
+    try{const res=await fetch(`${API}/api/plants/mine`,{headers:authHeaders()});
+    if(res.ok){const ps=await res.json();ul.innerHTML='';
+    if(!ps.length){ul.innerHTML='<li class="db-box bg-white text-[#E33529] font-bold">No plants paired yet. Go to Registry.</li>';return;}
+    ps.forEach(p=>{const li=document.createElement('li');
+    li.className='bg-white rounded-[20px] border-4 border-[#E33529] p-5 shadow-[4px_4px_0px_#E33529] flex justify-between items-center';
+    li.innerHTML=`<div><div class="font-bayon text-4xl">${p.plant_id||p.id}</div><div class="font-bold text-sm opacity-70">Zone ${p.zone_id} · Registered</div></div>
+    <div class="db-btn !text-sm !py-2 !px-4 cursor-default">ZONE ${p.zone_id}</div>`;ul.appendChild(li);});}
+    }catch(e){ul.innerHTML='<li class="font-bold text-[#E33529]">Could not load plants.</li>';}
+    gotoPage('profile');
+}
+
+// ══════════════════════════════════════════
+// ML PREDICTION
+// ══════════════════════════════════════════
+async function predictManual(){
+    const m=document.getElementById('m_moisture').value,t=document.getElementById('m_temp').value,h=document.getElementById('m_humidity').value;
+    if(!m||!t||!h)return;
+    document.getElementById('manualPredBox').classList.remove('hidden');
+    document.getElementById('manualPredChip').textContent='...';
+    try{const{res,data}=await postJSON(`${API}/api/predict/manual`,{soil_moisture:parseFloat(m),temperature_c:parseFloat(t),humidity:parseFloat(h)});
+    if(!res.ok)return;
+    document.getElementById('manualPredChip').textContent=data.prediction;
+    document.getElementById('m_moisture').value='';document.getElementById('m_temp').value='';document.getElementById('m_humidity').value='';
+    }catch(e){}
+}
+async function addPlant(){
+    const user=getUser();if(!user)return;
+    const pid=document.getElementById('plant_id').value.trim(),zone=document.getElementById('zone').value;
+    if(!pid)return;
+    const{res}=await postJSON(`${API}/api/plants/add`,{plant_id:pid,plant_name:'',zone_id:zone,owner_user_id:user.user_id,qr_data:`PLANT:${pid}`});
+    if(res.ok){activeZone=zone;document.getElementById('p_zone').textContent=zone;
+    const pm=document.getElementById('plantMsg');pm.textContent='PAIRED!';pm.classList.remove('hidden');setTimeout(()=>pm.classList.add('hidden'),3000);await loadLiveData();}
+}
+
+// ══════════════════════════════════════════
+// VOICE
+// ══════════════════════════════════════════
+let voiceRec=null,isListening=false;
+function initVoice(){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){document.getElementById('voiceStatus').textContent='NOT SUPPORTED IN THIS BROWSER';return;}
+    voiceRec=new SR();voiceRec.continuous=false;voiceRec.interimResults=true;voiceRec.lang='en-US';
+    voiceRec.onresult=(e)=>{let t='';for(let i=e.resultIndex;i<e.results.length;i++)t+=e.results[i][0].transcript;
+    document.getElementById('voiceTranscript').textContent=t.toUpperCase();
+    if(e.results[e.resultIndex].isFinal)processVoice(t.toLowerCase().trim());};
+    voiceRec.onend=()=>{isListening=false;document.getElementById('btnVoice').classList.remove('voice-listening');document.getElementById('voiceStatus').textContent='TAP TO SPEAK';};
+    voiceRec.onerror=(e)=>{isListening=false;document.getElementById('voiceStatus').textContent='ERROR: '+e.error.toUpperCase();};
+}
+function toggleVoice(){
+    if(!voiceRec)initVoice();if(!voiceRec)return;
+    if(isListening){voiceRec.stop();isListening=false;}
+    else{voiceRec.start();isListening=true;document.getElementById('btnVoice').classList.add('voice-listening');
+    document.getElementById('voiceStatus').textContent='LISTENING...';document.getElementById('voiceTranscript').textContent='';}
+}
+function processVoice(cmd){
+    const vs=document.getElementById('voiceStatus');
+    if(cmd.includes('water')||cmd.includes('pump')){vs.textContent='CMD: TOGGLING PUMP';handleMotorClick();speak('Toggling water pump.');}
+    else if(cmd.includes('moisture')||cmd.includes('soil')){const v=document.getElementById('kvMoisture').textContent;vs.textContent='MOISTURE: '+v;speak('Moisture is '+v);}
+    else if(cmd.includes('temp')){const v=document.getElementById('kvTemp').textContent;vs.textContent='TEMP: '+v;speak('Temperature is '+v);}
+    else if(cmd.includes('humid')){const v=document.getElementById('kvHumidity').textContent;vs.textContent='HUMIDITY: '+v;speak('Humidity is '+v);}
+    else if(cmd.includes('alert')||cmd.includes('log')){vs.textContent='CMD: SHOWING LOGS';loadNotifs();speak('Loading system alerts.');}
+    else if(cmd.includes('status')){const l=document.getElementById('plantLabel').textContent;vs.textContent='STATUS: '+l;speak('Plant status: '+l);}
+    else if(cmd.includes('profile')){vs.textContent='CMD: OPENING PROFILE';gotoPage_profile();speak('Opening profile.');}
+    else{vs.textContent='UNKNOWN COMMAND';speak('Sorry, unknown command. Try water plant, check moisture, or status.');}
+}
+function speak(t){if(!('speechSynthesis'in window))return;speechSynthesis.speak(new SpeechSynthesisUtterance(t));}
+
+// ══════════════════════════════════════════
+// NOTIFICATIONS
+// ══════════════════════════════════════════
+async function loadNotifs(){
+    const user=getUser();if(!user)return;
+    const res=await fetch(`${API}/api/notifications/${user.user_id}`,{headers:authHeaders()});
+    if(res.status===401){logout();return;}
+    const data=await res.json();
+    
+    function renderList(listId, sliceCount) {
+        const ul=document.getElementById(listId);
+        if(!ul) return;
+        ul.innerHTML='';
+        const d = sliceCount ? data.slice(0, sliceCount) : data;
+        if(!Array.isArray(d)||!d.length){ul.innerHTML='<li class="bg-white p-4 rounded-xl border-4 border-[#E33529] font-bold">ALL CLEAR.</li>';return;}
+        d.forEach(n=>{const li=document.createElement('li');
+        li.className='bg-white p-5 rounded-[20px] border-4 border-[#E33529] shadow-[4px_4px_0px_#E33529] uppercase flex flex-col md:flex-row justify-between items-start md:items-center gap-3';
+        li.innerHTML=`<div class="flex-1"><div class="flex gap-3 items-center border-b-2 border-[#E33529]/20 pb-2 mb-2"><span class="font-bayon text-2xl">${n.irrigation_need}</span><span class="text-xs opacity-50">${n.created_time}</span></div><div class="text-xs">${n.message}</div></div>
+        <button class="db-btn !text-xs !py-2 !px-3 !bg-[#F4CED3] !text-[#E33529]" ${n.status==='read'?'disabled':''} onclick="markNotifRead(${n.notif_id})">${n.status==='read'?'ARCHIVED':'MARK READ'}</button>`;
+        ul.appendChild(li);});
+    }
+
+    renderList('notifs-home', 3);
+    renderList('notifs-page', 0);
+}
+function stopNotifPolling(){clearInterval(notifTimer);notifTimer=null;}
+async function pollNewNotifs(){
+    const user=getUser();if(!user)return;
+    try{const res=await fetch(`${API}/api/notifications/${user.user_id}`,{headers:authHeaders()});if(!res.ok)return;
+    const data=await res.json();if(!Array.isArray(data))return;
+    const unread=data.filter(n=>String(n.status||'').toLowerCase()!=='read');
+    if(!notifBootstrapped){unread.forEach(n=>seenNotifIds.add(n.notif_id));notifBootstrapped=true;return;}
+    const novel=unread.filter(n=>!seenNotifIds.has(n.notif_id));unread.forEach(n=>seenNotifIds.add(n.notif_id));
+    if(!novel.length)return;
+    if('Notification'in window&&Notification.permission==='granted')novel.slice(0,3).forEach(n=>{const m=new Notification('Smart Plant',{body:n.message,icon:'./icon.png'});m.onclick=()=>{window.focus();loadNotifs();m.close();};});
+    }catch(e){}
+}
+function startNotificationPolling(){stopNotifPolling();pollNewNotifs();notifTimer=setInterval(pollNewNotifs,10000);}
+async function markNotifRead(id){const{res}=await postJSON(`${API}/api/notifications/${id}/read`,{});if(res.ok)await loadNotifs();}
+async function markAllNotifsRead(){const{res}=await postJSON(`${API}/api/notifications/read-all`,{});if(res.ok)await loadNotifs();}
+function triggerPushAlert(title,body){if('Notification'in window&&Notification.permission==='granted')new Notification(title,{body,icon:'./icon.png'});}
+function gotoPage_notifs(){loadNotifs();gotoPage('notifs');}
+
+// ── Push Vapid ──
+async function subscribeToPush(){
+    if(!('serviceWorker'in navigator)||!('PushManager'in window)){alert('Push not supported by browser');return;}
+    try{
+        const vr=await fetch(`${API}/api/push/vapid-key`);
+        const vd=await vr.json();
+        if(!vd.publicKey){alert('Push notifications are disabled on the backend. Developer needs to start the server with VAPID keys.');return;}
+        const reg=await navigator.serviceWorker.ready;const k=vd.publicKey;
+        const pad='='.repeat((4-k.length%4)%4);const raw=atob((k+pad).replace(/-/g,'+').replace(/_/g,'/'));
+        const arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+        const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:arr});
+        pushSubscription=sub;const subJ=sub.toJSON();
+        await postJSON(`${API}/api/push/subscribe`,{endpoint:subJ.endpoint,keys:subJ.keys});
+    }catch(e){alert('Error subscribing to push: ' + e.message);}
+}
+function openPushModal() {
+    document.getElementById('push-modal-overlay').classList.remove('hidden');
+    document.getElementById('push-modal-overlay').classList.add('flex');
+    const on = !!pushSubscription;
+    document.getElementById('btnPushEnable').classList.toggle('opacity-50', on);
+    document.getElementById('btnPushDisable').classList.toggle('opacity-50', !on);
+}
+function closePushModal() {
+    document.getElementById('push-modal-overlay').classList.add('hidden');
+    document.getElementById('push-modal-overlay').classList.remove('flex');
+}
+async function setPushState(enable) {
+    if (enable) {
+        if (!pushSubscription) {
+            if (await Notification.requestPermission() === 'granted') await subscribeToPush();
+        }
+    } else {
+        if (pushSubscription) {
+            try {
+                const s = pushSubscription.toJSON();
+                await postJSON(`${API}/api/push/unsubscribe`, {endpoint: s.endpoint});
+                await pushSubscription.unsubscribe();
+                pushSubscription = null;
+            } catch(e) {}
+        }
+    }
+    const btn = document.getElementById('btnNotifSettings');
+    if(btn) btn.innerHTML = pushSubscription ? '🔔 DIRECT PUSH: ENABLED' : '🔕 DIRECT PUSH: DISABLED';
+    closePushModal();
+}
+</script>
+</body>
+</html>

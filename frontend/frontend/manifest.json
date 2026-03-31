@@ -1,0 +1,18 @@
+{
+  "name": "SmartPlant",
+  "short_name": "SmartPlant",
+  "description": "Smart Plant Monitoring and Automatic Irrigation Dashboard",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "./icon.png",
+      "sizes": "192x192 512x512 any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
