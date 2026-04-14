@@ -1139,15 +1139,17 @@ if __name__ == "__main__":
     if args.train_model:
         train_model_from_csv()
     else:
+        port = int(os.getenv("PORT", 5000))
+        debug = os.getenv("FLASK_ENV", "production").strip().lower() == "development"
         import socket
         try:
             s_ip = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s_ip.connect(("8.8.8.8", 80))
             local_ip = s_ip.getsockname()[0]
             s_ip.close()
-            print(f"\n[SERVER] SmartPlant Running at: http://{local_ip}:5000")
-            print(f"[HARDWARE] Set ESP32 API_URL to: http://{local_ip}:5000/api/esp/sensor\n")
+            print(f"\n[SERVER] SmartPlant Running at: http://{local_ip}:{port}")
+            print(f"[HARDWARE] Set ESP32 API_URL to: http://{local_ip}:{port}/api/esp/sensor\n")
         except Exception:
-            print("[SERVER] Started on all interfaces (port 5000)")
-        
-        app.run(host="0.0.0.0", port=5000, debug=True)
+            print(f"[SERVER] Started on all interfaces (port {port})")
+
+        app.run(host="0.0.0.0", port=port, debug=debug)

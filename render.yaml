@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: smartplant-api
+    runtime: python
+    rootDir: backend/backend
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: SMARTPLANT_JWT_SECRET
+        generateValue: true
+      - key: SMARTPLANT_ESP_DEVICE_KEY
+        generateValue: true
+      - key: SMARTPLANT_REQUIRE_ESP_DEVICE_KEY
+        value: "true"
+      - key: SMARTPLANT_VAPID_PRIVATE_KEY
+        sync: false
+      - key: SMARTPLANT_VAPID_PUBLIC_KEY
+        sync: false
+      - key: SMARTPLANT_VAPID_EMAIL
+        sync: false
+      - key: FLASK_ENV
+        value: production
