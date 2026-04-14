@@ -13,7 +13,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 import requests
@@ -1118,6 +1118,20 @@ def push_unsubscribe():
     con.close()
     return jsonify({"message": "unsubscribed", "deleted": deleted})
 
+# ═══════════════════════════════════════════════════════════════
+# FRONTEND STATIC ROUTES
+# ═══════════════════════════════════════════════════════════════
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "frontend", "frontend")
+
+@app.route("/")
+def serve_index():
+    return send_from_directory(FRONTEND_DIR, "index.html")
+
+@app.route("/<path:path>")
+def serve_static(path):
+    if os.path.exists(os.path.join(FRONTEND_DIR, path)):
+        return send_from_directory(FRONTEND_DIR, path)
+    return send_from_directory(FRONTEND_DIR, "index.html")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SmartPlant backend")

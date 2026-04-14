@@ -319,7 +319,7 @@ if ('serviceWorker' in navigator) {
         }).catch(err => console.log('SW registration error', err));
     });
 }
-function resolveApiBase(){return(location.hostname==="localhost"||location.hostname==="127.0.0.1"||location.hostname==="10.82.47.207")?"http://10.82.47.207:5000":"https://smartplant-4j1b.onrender.com";}
+function resolveApiBase(){return(location.hostname==="localhost"||location.hostname==="127.0.0.1"||location.hostname==="10.82.47.207")?"http://10.82.47.207:5000":"http://pratirupa10.pythonanywhere.com";}
 const API=resolveApiBase();
 let liveTimer=null,notifTimer=null,activeZone="A",pushSubscription=null;
 let hwOnline=false,motorOn=false,lastMoisture=null;
