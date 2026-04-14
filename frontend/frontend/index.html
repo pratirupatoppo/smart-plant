@@ -121,7 +121,7 @@
     <nav class="fixed top-0 left-0 w-full z-[100] bg-[#F3F3E9] border-b-4 border-[#E33529] px-4 py-3 flex justify-between items-center">
         <button onclick="gotoPage('dash')" class="font-bayon text-3xl text-[#E33529] cursor-pointer border-none bg-transparent p-0">SMART PLANT</button>
         <div class="flex gap-3 items-center">
-            <button id="btnInstall" class="db-btn !py-2 !px-4 !text-sm hidden" onclick="installApp()">INSTALL</button>
+            <button id="btnInstall" class="db-btn !py-2 !px-4 !text-sm !bg-[#DBF4CD] !text-[#E33529]" onclick="installApp()">INSTALL</button>
             <button id="btnBell" class="db-btn !px-3 !py-2 hidden !bg-[#FDE047] !text-[#E33529]" onclick="gotoPage_notifs()" title="Notifications">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>
             </button>
@@ -312,18 +312,26 @@
 
 <script>
 // ══════════════════════════════════════════
-// CONFIG & STATE
-// ══════════════════════════════════════════
-function resolveApiBase(){return(location.hostname==="localhost"||location.hostname==="127.0.0.1")?"http://127.0.0.1:5000":"https://smartplant-4j1b.onrender.com";}
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+            console.log('SW registered!', reg);
+        }).catch(err => console.log('SW registration error', err));
+    });
+}
+function resolveApiBase(){return(location.hostname==="localhost"||location.hostname==="127.0.0.1"||location.hostname==="10.82.47.207")?"http://10.82.47.207:5000":"https://smartplant-4j1b.onrender.com";}
 const API=resolveApiBase();
 let liveTimer=null,notifTimer=null,activeZone="A",pushSubscription=null;
 let hwOnline=false,motorOn=false,lastMoisture=null;
 const seenNotifIds=new Set();let notifBootstrapped=false;
 let deferredPrompt=null;
-window.addEventListener('beforeinstallprompt',(e)=>{e.preventDefault();deferredPrompt=e;document.getElementById('btnInstall')?.classList.remove('hidden');});
+window.addEventListener('beforeinstallprompt',(e)=>{e.preventDefault();deferredPrompt=e;});
 window.addEventListener('appinstalled',()=>{document.getElementById('btnInstall')?.classList.add('hidden');});
 async function installApp(){
-    if(!deferredPrompt)return;
+    if(!deferredPrompt){
+        showModal('📱','INSTALL PWA','To install this app, you must access it via localhost or use the "Add to Home Screen" option in your browser menu.');
+        return;
+    }
     deferredPrompt.prompt();
     const{outcome}=await deferredPrompt.userChoice;
     if(outcome==='accepted')document.getElementById('btnInstall').classList.add('hidden');

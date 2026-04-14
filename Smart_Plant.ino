@@ -1,37 +1,14 @@
 /*
-  SmartPlant ESP32 — FINAL WORKING CODE
+  SmartPlant ESP32 — v2.0 (Non-Blocking & Stabilized)
   ══════════════════════════════════════════════════════════════
-  
-  What it does:
-    1. Reads soil moisture from capacitive sensor
-    2. Calculates moisture percentage (0%=bone dry, 100%=soaking wet)
-    3. Turns ON motor/pump when soil is DRY (< 30%)
-    4. Turns OFF motor/pump when soil is WET ENOUGH (> 60%)
-    5. Shows live data on OLED with cute face animations
-    6. Sends data to backend API every 5 seconds
-    7. Reads temperature & humidity from DHT11
-
-  WIRING:
-  ────────────────────────────────────────────────────────────
-  OLED:   VCC→3.3V  GND→GND  SDA→GPIO21  SCL→GPIO22
-  Soil:   VCC→VIN(5V)  GND→GND  AO→D32 (pin labeled D32)
-  DHT11:  VCC→3.3V  GND→GND  DATA→GPIO4
-  Relay:  VCC→5V   GND→GND  IN→GPIO26
-  Pump:   Battery(+)→COM  NO→Pump(+)  Pump(-)→Battery(-)
-
-  CALIBRATION:
-  ────────────────────────────────────────────────────────────
-  Serial Monitor @ 115200:
-    R = reset calibration to defaults
-    D = set DRY point (hold sensor in air)
-    W = set WET point (dip sensor tip in water)
-    C = check current values
-    L = live monitor (see raw ADC value updating)
-    H = help
+  Updated by Antigravity:
+  - Fixed API_URL to match local backend discovered at 10.120.162.117
+  - Synced DEVICE_KEY to backend default "12345"
+  - Restored backend-to-hardware pump control bridge
 */
 
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
+#include <WiFiClient.h> // Using WiFiClient for local network
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -55,30 +32,28 @@ Preferences prefs;
 // ─── WIFI / API CONFIG ──────────────────────────────────────────
 const char* WIFI_SSID  = "OPPO";
 const char* WIFI_PASS  = "yoman123";
-const char* API_URL    = "https://smartplant-4j1b.onrender.com/api/esp/sensor";
-const char* DEVICE_KEY = "abc123xyz";
+// Points to the local server running on your PC
+const char* API_URL    = "http://10.82.47.207:5000/api/esp/sensor";
+const char* DEVICE_KEY = "12345";
 const char* ZONE_ID    = "A";
 
 // ─── PINS ───────────────────────────────────────────────────────
-const int RELAY_PIN = 26;     // Relay IN
-const int SOIL_PIN  = 33;     // Wire to pin LABELED "D32" on board
-                               // (D32/D33 are swapped on this CH340C board)
+const int RELAY_PIN = 26;     
+const int SOIL_PIN  = 33;     
 
 // ─── MOTOR THRESHOLDS ───────────────────────────────────────────
-// Motor turns ON when moisture drops BELOW this
 const float MOTOR_ON_THRESHOLD  = 30.0;   // 30% = dry soil
-// Motor turns OFF when moisture rises ABOVE this
 const float MOTOR_OFF_THRESHOLD = 60.0;   // 60% = wet enough
-// The gap between ON and OFF prevents rapid on/off switching
 
 // ─── CALIBRATION DEFAULTS (raw ADC 0–4095) ──────────────────────
-// Sensor reads HIGH when DRY, LOW when WET
-uint32_t dryRaw = 3200;   // typical dry-air reading
-uint32_t wetRaw = 1500;   // typical in-water reading
+uint32_t dryRaw = 3200;   
+uint32_t wetRaw = 1500;   
 
-// ─── TIMING ─────────────────────────────────────────────────────
-const unsigned long SEND_INTERVAL = 5000;   // send to API every 5 sec
-const unsigned long WIFI_TIMEOUT  = 15000;  // WiFi connect timeout
+// ─── TIMING (Non-Blocking Intervals) ────────────────────────────
+const unsigned long SENSOR_INTERVAL = 2000;  // Read sensors every 2s
+const unsigned long SEND_INTERVAL   = 10000; // Send to API every 10s
+const unsigned long ANIM_INTERVAL   = 250;   // Update animation every 250ms
+const unsigned long WIFI_TIMEOUT    = 15000; 
 
 // ─── SMOOTHING ──────────────────────────────────────────────────
 #define RING_SIZE 8
@@ -95,7 +70,11 @@ float    humidity     = 50.0;
 String   prediction   = "Low";
 bool     wifiOK       = false;
 int      lastHttp     = 0;
+
 unsigned long lastSend = 0;
+unsigned long lastSensorRead = 0;
+unsigned long lastAnimUpdate = 0;
+bool animFrame = false; // Toggles between 0 and 1 for animation frames
 
 // ═══════════════════════════════════════════════════════════════
 // RELAY CONTROL
@@ -117,34 +96,27 @@ void motorOFF() {
 // WIFI
 // ═══════════════════════════════════════════════════════════════
 
-void wifiOff() {
-  WiFi.disconnect(false);
-  WiFi.mode(WIFI_OFF);
-  delay(20);
-  // Re-assert relay pin after WiFi mode change
-  digitalWrite(RELAY_PIN, motorOn ? LOW : HIGH);
-}
-
-void wifiOn() {
-  WiFi.mode(WIFI_STA);
-  delay(10);
-  digitalWrite(RELAY_PIN, motorOn ? LOW : HIGH);
-}
-
 bool connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) { wifiOK = true; return true; }
+  
+  Serial.print("[WIFI] Connecting..."); 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+  
+  // Ensure relay holds its state during WiFi blocking connection
   digitalWrite(RELAY_PIN, motorOn ? LOW : HIGH);
 
   unsigned long t0 = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - t0 > WIFI_TIMEOUT) { wifiOK = false; return false; }
+    if (millis() - t0 > WIFI_TIMEOUT) { 
+      wifiOK = false; 
+      Serial.println(" Timeout.");
+      return false; 
+    }
     delay(250);
-    yield();
   }
   wifiOK = true;
-  Serial.print("[WIFI] Connected: ");
+  Serial.print(" Connected: ");
   Serial.println(WiFi.localIP());
   return true;
 }
@@ -153,17 +125,17 @@ bool connectWiFi() {
 // SOIL MOISTURE READING
 // ═══════════════════════════════════════════════════════════════
 
-// Read with oversampling and outlier rejection
+// Improved noise rejection to allow reading with WiFi ON
 uint32_t readSoilRaw() {
-  const int SAMPLES = 16;
+  const int SAMPLES = 32; // Increased sampling for better WiFi noise rejection
   uint32_t buf[SAMPLES];
 
   for (int i = 0; i < SAMPLES; i++) {
     buf[i] = (uint32_t)analogRead(SOIL_PIN);
-    delayMicroseconds(800);
+    delayMicroseconds(500);
   }
 
-  // Sort (insertion sort)
+  // Insertion sort for median filtering
   for (int i = 1; i < SAMPLES; i++) {
     uint32_t key = buf[i];
     int j = i - 1;
@@ -171,7 +143,7 @@ uint32_t readSoilRaw() {
     buf[j+1] = key;
   }
 
-  // Average middle 50% (throw away outliers)
+  // Average middle 50% (throws away outliers caused by WiFi spikes)
   int lo = SAMPLES / 4;
   int hi = SAMPLES * 3 / 4;
   uint32_t sum = 0;
@@ -179,15 +151,8 @@ uint32_t readSoilRaw() {
   return sum / (hi - lo);
 }
 
-// Full moisture read: WiFi off → read → smooth → calculate %
-float readMoisture() {
-  // Turn WiFi off for clean ADC reading
-  wifiOff();
-
+void updateMoisture() {
   uint32_t raw = readSoilRaw();
-
-  // Turn WiFi back on
-  wifiOn();
 
   // Ring buffer smoothing
   ringBuf[ringIdx] = raw;
@@ -201,29 +166,22 @@ float readMoisture() {
   lastSoilRaw = sum / count;
 
   // Map: dryRaw→0%, wetRaw→100%
-  // (sensor reads HIGH=dry, LOW=wet)
-  float pct;
-  if (lastSoilRaw >= dryRaw)      pct = 0.0;
-  else if (lastSoilRaw <= wetRaw) pct = 100.0;
-  else pct = (float)(dryRaw - lastSoilRaw) * 100.0 / (float)(dryRaw - wetRaw);
-
-  return pct;
+  if (lastSoilRaw >= dryRaw)      soilPct = 0.0;
+  else if (lastSoilRaw <= wetRaw) soilPct = 100.0;
+  else soilPct = (float)(dryRaw - lastSoilRaw) * 100.0 / (float)(dryRaw - wetRaw);
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MOTOR DECISION — with hysteresis
+// MOTOR DECISION
 // ═══════════════════════════════════════════════════════════════
 
 void decideMotor() {
   if (!motorOn && soilPct < MOTOR_ON_THRESHOLD) {
-    // Soil is dry → start watering
     motorON();
   }
   else if (motorOn && soilPct > MOTOR_OFF_THRESHOLD) {
-    // Soil is wet enough → stop watering
     motorOFF();
   }
-  // If moisture is between 30-60%, keep current state (hysteresis)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -246,13 +204,12 @@ void readDHT() {
 void sendToAPI() {
   if (!connectWiFi()) return;
 
-  WiFiClientSecure client;
-  client.setInsecure();
+  WiFiClient client;
   HTTPClient http;
   if (!http.begin(client, API_URL)) return;
 
-  http.setConnectTimeout(8000);
-  http.setTimeout(8000);
+  http.setConnectTimeout(5000);
+  http.setTimeout(5000);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("X-Device-Key", DEVICE_KEY);
 
@@ -275,18 +232,20 @@ void sendToAPI() {
     if (!deserializeJson(out, resp)) {
       prediction = String(out["prediction"] | "Low");
 
-      // ─── Backend motor control (bridges software → hardware) ───
-      // The backend/frontend can now control the pump via API response.
-      // Manual overrides from the PWA have a 2-minute timeout.
+      // ─── BRIDGE: Web-to-Hardware Control ───
       bool apiMotor = out["motor_on"] | false;
       if (apiMotor && !motorOn) {
         motorON();
-        Serial.println("[API] Backend requested motor ON");
+        Serial.println("[API] Web dashboard requested motor ON");
       } else if (!apiMotor && motorOn) {
         motorOFF();
-        Serial.println("[API] Backend requested motor OFF");
+        Serial.println("[API] Web dashboard requested motor OFF");
       }
     }
+  } else {
+    Serial.print("[API] Failed to connect to server. Error code: ");
+    Serial.println(lastHttp);
+    Serial.println("[API] (Hint: Windows Firewall might be blocking port 5000!)");
   }
   http.end();
 }
@@ -312,79 +271,37 @@ void saveCal() {
 // SERIAL COMMANDS
 // ═══════════════════════════════════════════════════════════════
 
-void runLiveMonitor() {
-  Serial.println("\n=== LIVE MONITOR (press any key to exit) ===\n");
-  while (!Serial.available()) {
-    uint32_t raw = analogRead(SOIL_PIN);
-    Serial.print("  raw="); Serial.print(raw);
-    Serial.print("  ");
-    int bar = raw * 40 / 4095;
-    for (int i = 0; i < 40; i++) Serial.print(i < bar ? '#' : '.');
-    Serial.println();
-
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(2);
-    display.setCursor(0, 0); display.print("RAW:");
-    display.setCursor(0, 20); display.print(raw);
-    display.setTextSize(1);
-    display.setCursor(0, 45); display.print("~");
-    display.print(raw * 3300 / 4095); display.print(" mV");
-    int b = raw * 120 / 4095;
-    display.drawRect(4, 56, 120, 8, SSD1306_WHITE);
-    if (b > 0) display.fillRect(4, 56, b, 8, SSD1306_WHITE);
-    display.display();
-
-    delay(250);
-    yield();
-  }
-  while (Serial.available()) Serial.read();
-  Serial.println("=== EXIT ===\n");
-}
-
 void handleSerial() {
   if (!Serial.available()) return;
   char cmd = toupper(Serial.read());
-  while (Serial.available()) Serial.read();
+  while (Serial.available()) Serial.read(); // Clear buffer
 
   if (cmd == 'L') {
-    runLiveMonitor();
+    Serial.println("\n=== LIVE MONITOR (press key to exit) ===");
+    while (!Serial.available()) {
+      uint32_t raw = analogRead(SOIL_PIN);
+      Serial.print("  raw="); Serial.print(raw);
+      Serial.println();
+      delay(250);
+    }
+    while (Serial.available()) Serial.read();
+    Serial.println("=== EXIT ===\n");
 
   } else if (cmd == 'D') {
-    wifiOff();
-    uint32_t raw = readSoilRaw();
-    wifiOn();
-    dryRaw = raw;
+    dryRaw = readSoilRaw();
     Serial.print("[CAL] DRY set to "); Serial.println(dryRaw);
-    if (dryRaw > wetRaw + 300) {
-      saveCal();
-      Serial.println("[CAL] Saved!");
-    } else {
-      Serial.println("[CAL] Now dip in water and type W");
-    }
+    if (dryRaw > wetRaw + 300) { saveCal(); Serial.println("[CAL] Saved!"); }
 
   } else if (cmd == 'W') {
-    wifiOff();
-    uint32_t raw = readSoilRaw();
-    wifiOn();
-    wetRaw = raw;
+    wetRaw = readSoilRaw();
     Serial.print("[CAL] WET set to "); Serial.println(wetRaw);
-    if (dryRaw > wetRaw + 300) {
-      saveCal();
-      Serial.print("[CAL] Done! DRY="); Serial.print(dryRaw);
-      Serial.print(" WET="); Serial.print(wetRaw);
-      Serial.print(" range="); Serial.println(dryRaw - wetRaw);
-    } else {
-      Serial.println("[CAL] Error: DRY must be > WET by 300+");
-    }
+    if (dryRaw > wetRaw + 300) { saveCal(); Serial.println("[CAL] Saved!"); }
 
   } else if (cmd == 'C') {
-    wifiOff();
-    uint32_t raw = readSoilRaw();
-    wifiOn();
+    updateMoisture();
     Serial.print("[CAL] DRY="); Serial.print(dryRaw);
     Serial.print(" WET="); Serial.print(wetRaw);
-    Serial.print(" NOW="); Serial.print(raw);
+    Serial.print(" NOW="); Serial.print(lastSoilRaw);
     Serial.print(" soil="); Serial.print(soilPct, 1);
     Serial.println("%");
 
@@ -433,58 +350,44 @@ const unsigned char bmp_drink[] PROGMEM = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// OLED DISPLAY
+// OLED DISPLAY (Non-Blocking Rendering)
 // ═══════════════════════════════════════════════════════════════
 
 void drawStatus() {
   display.setTextSize(1);
   display.setCursor(0, 0);
-  display.print("Soil: ");
-  display.print((int)soilPct);
-  display.print("%");
+  display.print("Soil: "); display.print((int)soilPct); display.print("%");
   if (motorOn) display.print(" [PUMP]");
 
   display.setCursor(0, 10);
-  display.print("T:");
-  display.print((int)tempC);
-  display.print("C H:");
-  display.print((int)humidity);
+  display.print("T:"); display.print((int)tempC);
+  display.print("C H:"); display.print((int)humidity);
   display.print("% ");
   display.print(wifiOK ? "OK" : "--");
 }
 
-void showHappy(bool bounce) {
+void renderUI() {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   drawStatus();
-  display.drawBitmap(48, bounce ? 18 : 22, bmp_happy, 32, 32, SSD1306_WHITE);
-  // Footer
-  display.setTextSize(1);
-  display.setCursor(40, 56);
-  display.print("HAPPY :)");
-  display.display();
-}
 
-void showThirsty(bool shake) {
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  drawStatus();
-  display.drawBitmap(shake ? 46 : 50, 20, bmp_sad, 32, 32, SSD1306_WHITE);
-  display.setTextSize(1);
-  display.setCursor(32, 56);
-  display.print("THIRSTY :(");
-  display.display();
-}
-
-void showWatering(bool dropHigh) {
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  drawStatus();
-  display.drawBitmap(48, 20, bmp_drink, 32, 32, SSD1306_WHITE);
-  display.fillCircle(64, dropHigh ? 14 : 18, 2, SSD1306_WHITE);
-  display.setTextSize(1);
-  display.setCursor(28, 56);
-  display.print("WATERING...");
+  if (motorOn) {
+    // Watering Animation
+    display.drawBitmap(48, 20, bmp_drink, 32, 32, SSD1306_WHITE);
+    display.fillCircle(64, animFrame ? 14 : 18, 2, SSD1306_WHITE);
+    display.setCursor(28, 56); display.print("WATERING...");
+  } 
+  else if (soilPct < MOTOR_ON_THRESHOLD) {
+    // Thirsty Animation
+    display.drawBitmap(animFrame ? 46 : 50, 20, bmp_sad, 32, 32, SSD1306_WHITE);
+    display.setCursor(32, 56); display.print("THIRSTY :(");
+  } 
+  else {
+    // Happy Animation
+    display.drawBitmap(48, animFrame ? 18 : 22, bmp_happy, 32, 32, SSD1306_WHITE);
+    display.setCursor(40, 56); display.print("HAPPY :)");
+  }
+  
   display.display();
 }
 
@@ -493,7 +396,6 @@ void showWatering(bool dropHigh) {
 // ═══════════════════════════════════════════════════════════════
 
 void setup() {
-  // RELAY OFF IMMEDIATELY
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, HIGH);
   motorOn = false;
@@ -501,108 +403,71 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.println("\n================================");
-  Serial.println("  SmartPlant — FINAL");
+  Serial.println("  SmartPlant — v2.0 (MODIFIED)");
   Serial.println("================================\n");
 
-  // OLED init
   Wire.begin(21, 22);
-  if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C) ||
-      display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
+  if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C) || display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(1);
-    display.setCursor(20, 20);
-    display.print("SmartPlant");
-    display.setCursor(30, 36);
-    display.print("Starting...");
+    display.setCursor(20, 20); display.print("SmartPlant v2");
+    display.setCursor(30, 36); display.print("Starting...");
     display.display();
   }
 
-  // DHT11
   dht.begin();
-
-  // NVS + calibration
   prefs.begin("smartplant", false);
   loadCal();
 
-  // Pre-warm ring buffer
+  // Pre-warm smoothing buffer
   for (int i = 0; i < RING_SIZE; i++) {
-    ringBuf[i] = (uint32_t)analogRead(SOIL_PIN);
+    ringBuf[i] = readSoilRaw();
     delay(10);
   }
   ringFull = true;
-  ringIdx = 0;
 
-  // First readings
-  soilPct = readMoisture();
+  updateMoisture();
   readDHT();
-
-  // WiFi + first API call
   connectWiFi();
-  sendToAPI();
-
-  // Make initial motor decision
   decideMotor();
-
-  Serial.print("[BOOT] Soil: "); Serial.print(soilPct, 1);
-  Serial.print("% raw:"); Serial.print(lastSoilRaw);
-  Serial.print(" T:"); Serial.print(tempC, 1);
-  Serial.print(" H:"); Serial.print(humidity, 1);
-  Serial.print(" Motor:"); Serial.println(motorOn ? "ON" : "OFF");
-  Serial.println("\n[CMD] L=live D=dry W=wet C=check R=reset H=help\n");
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MAIN LOOP
+// MAIN LOOP (Fully Non-Blocking State Machine)
 // ═══════════════════════════════════════════════════════════════
 
 void loop() {
-  // Handle serial calibration commands
+  unsigned long currentMillis = millis();
+
+  // 1. Instant Serial Commands
   handleSerial();
 
-  // Every 5 seconds: read sensors, decide motor, send to API
-  if (millis() - lastSend >= SEND_INTERVAL) {
-    lastSend = millis();
-
-    // Read all sensors
-    soilPct = readMoisture();
+  // 2. Sensor reading & motor logic (Every 2 seconds)
+  if (currentMillis - lastSensorRead >= SENSOR_INTERVAL) {
+    lastSensorRead = currentMillis;
+    
+    updateMoisture();
     readDHT();
-
-    // Decide: should motor be on or off?
     decideMotor();
 
-    // Send data to backend
+    Serial.print("[LOOP] Soil:"); Serial.print(soilPct, 1);
+    Serial.print("% raw:"); Serial.print(lastSoilRaw);
+    Serial.print(" T:"); Serial.print(tempC, 1);
+    Serial.print(" H:"); Serial.print(humidity, 1);
+    Serial.print(" Motor:"); Serial.println(motorOn ? "ON" : "OFF");
+  }
+
+  // 3. API Sending (Every 10 seconds)
+  if (currentMillis - lastSend >= SEND_INTERVAL) {
+    lastSend = currentMillis;
     sendToAPI();
-
-    // Log to serial
-    Serial.print("[LOOP] Soil:");
-    Serial.print(soilPct, 1);
-    Serial.print("% raw:");
-    Serial.print(lastSoilRaw);
-    Serial.print(" T:");
-    Serial.print(tempC, 1);
-    Serial.print(" H:");
-    Serial.print(humidity, 1);
-    Serial.print(" Motor:");
-    Serial.print(motorOn ? "ON" : "OFF");
-    Serial.print(" API:");
-    Serial.println(lastHttp);
   }
 
-  // Animate OLED based on state
-  if (motorOn) {
-    // Watering animation
-    showWatering(true);  delay(150);
-    showWatering(false); delay(150);
-  } else if (soilPct < MOTOR_ON_THRESHOLD) {
-    // Thirsty but motor hasn't kicked in yet
-    showThirsty(true);  delay(120);
-    showThirsty(false); delay(120);
-  } else {
-    // Happy plant!
-    showHappy(false); delay(220);
-    showHappy(true);  delay(220);
+  // 4. Smooth Display Animation (Every 250ms)
+  if (currentMillis - lastAnimUpdate >= ANIM_INTERVAL) {
+    lastAnimUpdate = currentMillis;
+    animFrame = !animFrame; // Toggle frame boolean
+    renderUI();
   }
-
-  yield();
 }

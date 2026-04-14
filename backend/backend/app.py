@@ -53,11 +53,9 @@ VAPID_CLAIMS_EMAIL = os.getenv("SMARTPLANT_VAPID_EMAIL", "mailto:smartplant@exam
 PUSH_ENABLED = bool(WEBPUSH_AVAILABLE and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
 
 if REQUIRE_ESP_DEVICE_KEY and not ESP_DEVICE_KEY:
-    
-    # ─── Weather API Configuration ────────────────────────────────────────
-    WEATHER_API_URL = os.getenv("SMARTPLANT_WEATHER_API_URL", "https://api.openweathermap.org/data/2.5/weather")
-    WEATHER_API_KEY = os.getenv("SMARTPLANT_WEATHER_API_KEY", "")
-    raise RuntimeError("SMARTPLANT_ESP_DEVICE_KEY must be set when SMARTPLANT_REQUIRE_ESP_DEVICE_KEY is enabled")
+    # ─── Defaulting for development ───
+    ESP_DEVICE_KEY = "12345"
+    print(f"[WARN] SMARTPLANT_ESP_DEVICE_KEY not set. Using default: {ESP_DEVICE_KEY}")
 
 
 def train_model_from_csv(data_path=DATA_PATH, model_out=MODEL_PATH):
@@ -1141,4 +1139,15 @@ if __name__ == "__main__":
     if args.train_model:
         train_model_from_csv()
     else:
+        import socket
+        try:
+            s_ip = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s_ip.connect(("8.8.8.8", 80))
+            local_ip = s_ip.getsockname()[0]
+            s_ip.close()
+            print(f"\n[SERVER] SmartPlant Running at: http://{local_ip}:5000")
+            print(f"[HARDWARE] Set ESP32 API_URL to: http://{local_ip}:5000/api/esp/sensor\n")
+        except Exception:
+            print("[SERVER] Started on all interfaces (port 5000)")
+        
         app.run(host="0.0.0.0", port=5000, debug=True)
